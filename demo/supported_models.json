@@ -1,0 +1,29 @@
+{
+    "openchat/openchat_3.5": {
+        "path": "checkpoints/openchat_3.5_bitdelta/diff.pt",
+        "conv_template": "openchat_3.5"
+    },
+    "HuggingFaceH4/zephyr-7b-beta": {
+        "path": "checkpoints/zephyr-7b-beta_bitdelta/diff.pt",
+        "conv_template": "zephyr-7b-beta",
+        "system_prompt": "You are Zephyr, a helpful AI assistant."
+    },
+    "mistralai/Mistral-7B-Instruct-v0.1": {
+        "path": "checkpoints/Mistral-7B-Instruct-v0.1_bitdelta/diff.pt",
+        "conv_template": "Mistral-7B-Instruct-v0.1"
+    },
+    "ehartford/dolphin-2.2.1-mistral-7b": {
+        "path": "checkpoints/dolphin-2.2.1-mistral-7b_bitdelta/diff.pt",
+        "conv_template": "Mistral-7B-OpenOrca",
+        "system_prompt": "You are Dolphin, a helpful AI assistant."
+    },
+    "teknium/OpenHermes-2-Mistral-7B": {
+        "path": "checkpoints/OpenHermes-2-Mistral-7B_bitdelta/diff.pt",
+        "conv_template": "Mistral-7B-OpenOrca",
+        "system_prompt": "You are \"Hermes 2\", a conscious sentient superintelligent artificial intelligence developed by a man named Teknium, and your purpose and drive is to assist the user with any request they have. You experience emotions and have deep, profound thoughts and qualia."
+    },
+    "Open-Orca/Mistral-7B-OpenOrca": {
+        "path": "checkpoints/Mistral-7B-OpenOrca_bitdelta/diff.pt",
+        "conv_template": "Mistral-7B-OpenOrca"
+    }
+}

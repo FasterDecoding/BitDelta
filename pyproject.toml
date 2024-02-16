@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bitdelta"
+version = "0.1"
+description = "BitDelta: Your Fine-Tune May Only be Worth One Bit"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "torch", "transformers", "accelerate", "sentencepiece", "protobuf",
+    "datasets", "triton==2.0.0"
+]
+
+[project.optional-dependencies]
+demo = ["gradio", "fschat", "psutil"]
+
+[project.urls]
+"Homepage" = "TODO"
+
+[tool.setuptools.packages.find]
+exclude = ["notebooks*", "scripts*"]
