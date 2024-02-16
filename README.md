@@ -2,7 +2,7 @@
 
 # BitDelta: Your Fine-Tune May Only Be Worth One Bit
 
-[Paper link][Website link]
+[[Paper](https://arxiv.org/abs/2402.10193)][Website]
 
 BitDelta compresses the weight delta between a fine-tuned and base model LLM to 1 bit, enabling accurate and efficient multi-tenant serving.
 
@@ -108,5 +108,12 @@ CUDA_VISIBLE_DEVICES=0 python \
 If you find BitDelta useful, please consider citing:
 
 ```
-[TODO]
+@misc{liu2024bitdelta,
+      title={BitDelta: Your Fine-Tune May Only Be Worth One Bit}, 
+      author={James Liu and Guangxuan Xiao and Kai Li and Jason D. Lee and Song Han and Tri Dao and Tianle Cai},
+      year={2024},
+      eprint={2402.10193},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
 ```
