@@ -2,7 +2,7 @@
 
 # BitDelta: Your Fine-Tune May Only Be Worth One Bit
 
-[[Paper](https://arxiv.org/abs/2402.10193)][Website]
+[[Paper](https://arxiv.org/abs/2402.10193)][Blog]
 
 BitDelta compresses the weight delta between a fine-tuned and base model LLM to 1 bit, enabling accurate and efficient multi-tenant serving.
 
