@@ -18,7 +18,7 @@ cd demo
 
 ## Download the deltas
 
-We uploaded the deltas of the 6 fine-tuned models to Huggingface model hub. You can download them by running the following command:
+We uploaded the deltas of the 6 fine-tuned models to Hugging Face model hub. You can download them by running the following command:
 
 ```bash
 huggingface-cli download --repo-type model --local-dir checkpoints FasterDecoding/BitDelta_Mistral_combo
