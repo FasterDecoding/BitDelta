@@ -13,7 +13,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "torch", "transformers", "accelerate", "sentencepiece", "protobuf",
+    "torch", "transformers==4.31.0", "accelerate", "sentencepiece", "protobuf",
     "datasets", "triton==2.0.0"
 ]
 
