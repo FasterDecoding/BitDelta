@@ -84,7 +84,7 @@ If `--save_full_model` is specified, the compressed model will also be saved in 
 Double check the perplexity of the compressed model:
 
 ```
-### Perplexity CheckCUDA_VISIBLE_DEVICES=0 python \
+CUDA_VISIBLE_DEVICES=0 python \
     bitdelta/eval_ppl.py \
     --base_model meta-llama/Llama-2-7b-hf \
     --dataset_name wikitext \
