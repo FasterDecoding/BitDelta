@@ -95,7 +95,7 @@ CUDA_VISIBLE_DEVICES=0 python \
 
 ```
 
-### Perplexity Check
+### Replicate Results
 
 To replicate our other results, please use `--save_full_model` to run the model in Llama format for compatibility with eval harnesses.
 
