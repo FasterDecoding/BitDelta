@@ -88,9 +88,11 @@ def load_diff(model, diff_dir):
             coeff = diff_dict[name + ".coeff"].to(device)
             mask = diff_dict[name + ".mask"].to(device)
 
-            setattr(module, "mask", mask)
-            setattr(module, "coeff", coeff)
-            # module.weight.add_((mask * coeff).to(module.weight.dtype))
+            # setattr(module, "mask", mask)
+            # setattr(module, "coeff", coeff)
+            weight = (unpack(mask)*2-1) * coeff
+
+            module.weight.add_(weight.T.to(module.weight.dtype))
         elif name + ".weight" in diff_dict:
             module.weight = nn.Parameter(diff_dict[name + ".weight"].to(device).to(module.weight.dtype))
 

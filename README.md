@@ -1,5 +1,3 @@
-[# Compressing Model Diffs for High-Througput Multi-Model Serving]: #
-
 # BitDelta: Your Fine-Tune May Only Be Worth One Bit
 
 [[Paper](https://arxiv.org/abs/2402.10193)][[Blog](https://fasterdecoding.github.io/BitDelta/)]
@@ -12,12 +10,7 @@ BitDelta compresses the weight delta between a fine-tuned and base model LLM to 
   </a>
 </div>
 
-
 The current release supports:
-
-
-
-
 
 - Llama-2 and Mistral based models.
 - Memory efficient 16-bit + 1-bit Δ Linear in PyTorch
@@ -63,7 +56,6 @@ See [`demo/README.md`](https://github.com/FasterDecoding/BitDelta/blob/main/demo
 
 [BitDelta Demo.webm](https://github.com/FasterDecoding/BitDelta/assets/51351043/b56747df-1108-42f2-ae6f-05e1c460080c)
 
-
 ## Usage
 
 We provide some scripts in (`./scripts`) so you can compress your own models! As an example, we will compress `lmsys/vicuna-7b-v1.5` with base model `meta-llama/Llama-2-7b-hf`.
@@ -92,7 +84,7 @@ If `--save_full_model` is specified, the compressed model will also be saved in 
 Double check the perplexity of the compressed model:
 
 ```
-CUDA_VISIBLE_DEVICES=0 python \
+### Perplexity CheckCUDA_VISIBLE_DEVICES=0 python \
     bitdelta/eval_ppl.py \
     --base_model meta-llama/Llama-2-7b-hf \
     --dataset_name wikitext \
@@ -103,13 +95,17 @@ CUDA_VISIBLE_DEVICES=0 python \
 
 ```
 
+### Perplexity Check
+
+To replicate our other results, please use `--save_full_model` to run the model in Llama format for compatibility with eval harnesses.
+
 ## Citation
 
 If you find BitDelta useful, please consider citing:
 
 ```
 @misc{liu2024bitdelta,
-      title={BitDelta: Your Fine-Tune May Only Be Worth One Bit}, 
+      title={BitDelta: Your Fine-Tune May Only Be Worth One Bit},
       author={James Liu and Guangxuan Xiao and Kai Li and Jason D. Lee and Song Han and Tri Dao and Tianle Cai},
       year={2024},
       eprint={2402.10193},
@@ -117,3 +113,5 @@ If you find BitDelta useful, please consider citing:
       primaryClass={cs.LG}
 }
 ```
+
+[# Compressing Model Diffs for High-Througput Multi-Model Serving]: #
