@@ -9,12 +9,13 @@ class BinaryDiff(nn.Module):
     def __init__(self, base, finetune):
         super().__init__()
         diff = finetune - base
+        # diff = decomposition(diff, 2048)
         quantile = diff.float().abs().mean()
 
         mask = torch.ones_like(diff)
         mask[diff < 0] = 0
         mask = pack(mask.bool().T)
-
+     
         self.register_buffer("mask", mask)
         self.register_buffer("base", base.T)
         self.register_parameter(
@@ -38,7 +39,15 @@ class BinaryDiff(nn.Module):
         repeated_mask = self.mask.unsqueeze(0).repeat(x.size(0), 1, 1)
         return x @ self.base + self.coeff * binary_bmm(x, repeated_mask)
 
-def compress_diff(base_model, finetuned_model, finetuned_compressed_model):
+def Pass(layers=None,name=None):
+    if layers is not None:
+        for layer in layers:
+            if layer in name:
+                return True
+    return False
+
+
+def compress_diff(base_model, finetuned_model, finetuned_compressed_model,layers=None):
     def compress_submodule(name, subname, module, submodule):
         target_device = submodule.weight.device
                     
@@ -59,11 +68,15 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model):
     # TODO: this can be parallelized
     for name, module in finetuned_compressed_model.named_modules():
         if "mlp" in name or "self_attn" in name:
+            
+            if Pass(layers,name) == True:
+                continue
+            
             for subname, submodule in module.named_children():
                 if "proj" in subname:
                     compress_submodule(name, subname, module, submodule)
 
-def save_diff(finetuned_compressed_model, save_dir):
+def save_diff(finetuned_compressed_model, save_dir,layers=None):
     diff_dict = {}
 
     for name, module in finetuned_compressed_model.named_modules():
@@ -91,6 +104,9 @@ def load_diff(model, diff_dir):
             # setattr(module, "mask", mask)
             # setattr(module, "coeff", coeff)
             weight = (unpack(mask)*2-1) * coeff
+            
+            if "mlp" in name:
+                weight = decomposition(weight, 1024)
 
             module.weight.add_(weight.T.to(module.weight.dtype))
         elif name + ".weight" in diff_dict:
@@ -105,11 +121,46 @@ def load_diff(model, diff_dir):
 
     model.config.vocab_size = model.lm_head.weight.size(0)
 
-def save_full_model(base_model_name, finetuned_model_name, diff_dir, save_dir, device):
+def decomposition(masked_input_tensor,dim):
+    # if "mlp" in name:
+    #     dim = int(dim * 1.45)
+    
+    U , S , V = torch.svd(masked_input_tensor)
+    # total_sum , partial_sum = torch.sum(S) , torch.sum(S[:128])
+    # import pdb; pdb.set_trace()
+    U , S , V = U[:, :dim],S[:dim] ,V[:, :dim]
+    return torch.mm(torch.mm(U, torch.diag(S)), V.t())
+
+def save_full_model(base_model_name, finetuned_model_name, diff_dir, save_dir, device,layers=None):
     base_model = get_model(base_model_name, device)
     tokenizer = get_tokenizer(finetuned_model_name)
-    load_diff(base_model, diff_dir)
+    
+    finetuned_model = get_model(finetuned_model_name, device)
+    # params = {}
+    
+    # for k ,v in finetuned_model.named_parameters():
+    #     if layers is not None:
+    #         for layer in layers:
+    #             if layer in k:
+    #                 if "mlp" in k or "self_attn" in k:
+    #                     delta =  v.detach().cpu() - base_model.get_submodule(k.replace('.weight',"")).weight.detach().cpu()
+    #                     dim = 128
+    #                     if "mlp" in k:  
+    #                         dim = int(dim * 1.45)
+    #                     # import pdb; pdb.set_trace()
+    #                     params[k] = decomposition(delta.to(torch.float32), dim).to(torch.bfloat16)
 
+    # import pdb; pdb.set_trace()
+    # dict(base_model.named_parameters())['model.layers.0.self_attn.o_proj.weight']
+    
+    # with torch.no_grad():
+    #     for param in params:
+    #         base_model.get_submodule(param.replace('.weight',"")).weight.add_(params[param].detach().to(device))
+        
+    # import pdb; pdb.set_trace()   
+    load_diff(base_model, diff_dir)
+    
+     
     base_model.save_pretrained(save_dir)
     tokenizer.save_pretrained(save_dir)
 
