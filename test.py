@@ -5,9 +5,9 @@ from transformers import AutoConfig, AutoModelForCausalLM
 from accelerate import infer_auto_device_map, init_empty_weights
 import torch.nn as nn
 import os
-from llava.model.language_model.llava_llama import LlavaConfig
+# from llava.model.language_model.llava_llama import LlavaConfig
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from llava.model import *
+# from llava.model import *
 
 def get_tokenizer(tokenizer_name):
     tokenizer = transformers.AutoTokenizer.from_pretrained(
@@ -88,18 +88,21 @@ def save_full_model(base_model_name, finetuned_model_name, diff_dir, save_dir, d
 
     del base_model
 
-model_path = "/home/pingbowen/models/Llava-v1-vicuna/Llava-v1/"
 
-lora_cfg_pretrained = LlavaConfig.from_pretrained(model_path)
-tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=False)
-print('Loading LLaVA from base model...')
-model = LlavaLlamaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=lora_cfg_pretrained, **kwargs)
-token_num, tokem_dim = model.lm_head.out_features, model.lm_head.in_features
-if model.lm_head.weight.shape[0] != token_num:
-    model.lm_head.weight = torch.nn.Parameter(torch.empty(token_num, tokem_dim, device=model.device, dtype=model.dtype))
-    model.model.embed_tokens.weight = torch.nn.Parameter(torch.empty(token_num, tokem_dim, device=model.device, dtype=model.dtype))
+A = torch.Tensor([[1, 2, 3],[6,5,4]])
+B = torch.Tensor([[9],[9]])
 
+A[:,-1:] = B
 
+print(A)
+# U,S,V = torch.svd(A)
+# # print("-----------------")
+
+# print(A.shape)
+# print("-----------------")
+# print(S.shape)
+# print("-----------------")
+# print(V)
 
 # base_model = get_model("/home/pingbowen/models/Llava-v1-vicuna/Llava-v1/", "cuda")
 # params = base_model.state_dict()

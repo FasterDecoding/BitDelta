@@ -6,10 +6,9 @@ from bitdelta.binary_gemm_kernel import pack, unpack, binary_bmm
 from bitdelta.utils import get_model, get_tokenizer
 
 class BinaryDiff(nn.Module):
-    def __init__(self, base, finetune):
+    def __init__(self, weight):
         super().__init__()
-        diff = finetune - base
-        diff = decomposition(diff, st=64, ed=1024)
+        diff = weight
         quantile = diff.float().abs().mean()
 
         mask = torch.ones_like(diff)
@@ -17,7 +16,7 @@ class BinaryDiff(nn.Module):
         mask = pack(mask.bool().T)
      
         self.register_buffer("mask", mask)
-        self.register_buffer("base", base.T)
+        # self.register_buffer("base", base.T)
         self.register_parameter(
             "coeff",
             nn.Parameter(
@@ -25,11 +24,11 @@ class BinaryDiff(nn.Module):
                     quantile,
                     dtype=torch.float32,
                     requires_grad=True,
-                    device=base.device,
+                    device=weight.device,
                 )
             ),
         )
-        del base, finetune, diff
+        # del base, finetune, diff
 
     def forward(self, x):
         # print(x.shape, self.base.shape, self.coeff.shape, self.mask.shape)
@@ -47,7 +46,7 @@ def Pass(layers=None,name=None):
     return False
 
 
-def compress_diff(base_model, finetuned_model, finetuned_compressed_model,layers=None):
+def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_dir,layers=None):
     def compress_submodule(name, subname, module, submodule):
         target_device = submodule.weight.device
                     
@@ -66,26 +65,38 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,layers
         setattr(module, subname, compressed)
 
     # TODO: this can be parallelized
-    # flag = False
     for name, module in finetuned_compressed_model.named_modules():
-        # if flag == True:
-        #     break
         
         if "self_attn" in name:
             for subname, submodule in module.named_children():
                 if "proj" in subname:
-                    compress_submodule(name, subname, module, submodule)
+                    base_weight = base_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
+                    finetuned_weight = finetuned_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
+                    # compress_submodule(name, subname, module, submodule)
+                    U,S,V = decomposition(finetuned_weight - base_weight,dim=1024)
+                    
+                    compressed_U, compressed_V = BinaryDiff(weight=U[:,64:]).to(finetuned_weight.device), BinaryDiff(weight=V[:,64:]).to(finetuned_weight.device)
+                    U_mask, U_coeff, V_mask, V_coeff = compressed_U.mask, compressed_U.coeff, compressed_V.mask, compressed_V.coeff
+                    weight_U , weight_V = (unpack(U_mask)*2-1) * U_coeff, (unpack(V_mask)*2-1) * V_coeff
+                    # import pdb; pdb.set_trace()
+                    U[:,64:] , V[:,64:] = weight_U.T, weight_V.T   # 不确定是否有bug
+                    delta = U @ torch.diag(S) @ V.t()
+                    with torch.no_grad():
+                        finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(base_weight + delta.to(torch.bfloat16)) 
+                    
+                    
         elif "mlp" in name:
             with torch.no_grad():
                 for subname, submodule in module.named_children():
                     if "proj" in subname:
                         base_weight = base_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
                         finetuned_weight = finetuned_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
-                        delta = decomposition(finetuned_weight - base_weight,dim=int(128 * 1.45)) 
-                        finetuned_compressed_model.get_submodule(f"{name}.{subname}").weight.copy_(base_weight + delta.to(torch.bfloat16))
-                        # flag = True
-                        # import pdb; pdb.set_trace()
-                        # break
+                        U,S,V = decomposition(finetuned_weight - base_weight,dim=int(128 * 1.45)) 
+                        delta = torch.mm(torch.mm(U, torch.diag(S)), V.t())
+                        finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(base_weight + delta.to(torch.bfloat16))
+    
+    
+    finetuned_model.save_pretrained(save_dir)
 
 def save_diff(finetuned_compressed_model, save_dir,layers=None,ori_diff=None):
     diff_dict = {}
@@ -135,7 +146,7 @@ def load_diff(model, diff_dir,ori_diff):
 
     model.config.vocab_size = model.lm_head.weight.size(0)
 
-def decomposition(masked_input_tensor,dim=None,st=None,ed=None):
+def decomposition(masked_input_tensor,dim=None,st=None,ed=None,name=None):
     U , S , V = torch.svd(masked_input_tensor.to(torch.float32))
     
     if dim is not None:
@@ -144,7 +155,7 @@ def decomposition(masked_input_tensor,dim=None,st=None,ed=None):
     if st is not None and ed is not None:
         U , S , V = U[:, st:ed],S[st:ed] ,V[:, st:ed]
     
-    return torch.mm(torch.mm(U, torch.diag(S)), V.t())
+    return U, S, V
 
 def save_full_model(base_model_name, finetuned_model_name, diff_dir, save_dir, device,layers=None,ori_diff=None):
     base_model = get_model(base_model_name, device)
@@ -152,24 +163,6 @@ def save_full_model(base_model_name, finetuned_model_name, diff_dir, save_dir, d
     
     finetuned_model = get_model(finetuned_model_name, device)
     # params = {}
-    
-    # for k ,v in finetuned_model.named_parameters():
-    #     if layers is not None:
-    #         for layer in layers:
-    #             if layer in k:
-    #                 if "mlp" in k or "self_attn" in k:
-    #                     delta =  v.detach().cpu() - base_model.get_submodule(k.replace('.weight',"")).weight.detach().cpu()
-    #                     dim = 128
-    #                     if "mlp" in k:  
-    #                         dim = int(dim * 1.45)
-    #                     # import pdb; pdb.set_trace()
-    #                     params[k] = decomposition(delta.to(torch.float32), dim).to(torch.bfloat16)
-
-    # dict(base_model.named_parameters())['model.layers.0.self_attn.o_proj.weight']
-    
-    # with torch.no_grad():
-    #     for param in params:
-    #         base_model.get_submodule(param.replace('.weight',"")).weight.add_(params[param].detach().to(device))
         
     load_diff(base_model, diff_dir,ori_diff=ori_diff)
     
@@ -177,3 +170,4 @@ def save_full_model(base_model_name, finetuned_model_name, diff_dir, save_dir, d
     tokenizer.save_pretrained(save_dir)
 
     del base_model
+

@@ -23,6 +23,13 @@ with torch.no_grad():
     base_model = get_model(args.base_model, args.base_model_device, args.base_model_memory_map)
     finetuned_model = get_model(args.finetuned_model, args.finetuned_model_device, args.finetuned_model_memory_map)
 
+def original_diff(base_model, finetuned_model):
+    origin_diff = {}
+    for k, v in finetuned_model.named_parameters():
+        if "mlp" in k or "self_attn" in k:
+            origin_diff[k] = v.detach().cpu() - base_model.get_submodule(k.replace('.weight',"")).weight.detach().cpu()
+    return origin_diff
+
 # get corr/stddev stats
 if args.debug:
     print(f"finding corr/stddev stats...")
@@ -94,6 +101,8 @@ if args.debug:
     with open(os.path.join(args.save_dir, f"train_loss_{args.num_groups}.json"), "w") as f:
         json.dump(train_loss_list, f)
 
+ori_diff = original_diff(base_model, finetuned_model)
+
 # # save trained delta
 save_diff(finetuned_compressed_model, os.path.join(args.save_dir, "diff.pt"),layers=args.layers)
 
@@ -102,6 +111,6 @@ torch.cuda.empty_cache()
 
 if args.save_full_model:
     print("saving uncalibrated model")
-    save_full_model(args.base_model, args.finetuned_model, os.path.join(args.save_dir, "diff_untrained.pt"), os.path.join(args.save_dir, f"uncalibrated_model"), device="cpu",layers=args.layers)
+    save_full_model(args.base_model, args.finetuned_model, os.path.join(args.save_dir, "diff_untrained.pt"), os.path.join(args.save_dir, f"uncalibrated_model"), device="cpu",layers=args.layers,ori_diff=ori_diff)
     # print("saving calibrated model")
     # save_full_model(args.base_model, args.finetuned_model, os.path.join(args.save_dir, "diff.pt"), os.path.join(args.save_dir, "calibrated_model"), device="cpu")
