@@ -64,16 +64,22 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
         torch.cuda.empty_cache()
         setattr(module, subname, compressed)
 
-    # TODO: this can be parallelized
+    # TODO: 根据thresh 选择压缩比例
     for name, module in finetuned_compressed_model.named_modules():
-        
-        if "self_attn" in name:
+        if "self_attn" in name or "mlp" in name:
             for subname, submodule in module.named_children():
                 if "proj" in subname:
                     base_weight = base_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
                     finetuned_weight = finetuned_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
-                    # compress_submodule(name, subname, module, submodule)
-                    U,S,V = decomposition(finetuned_weight - base_weight,dim=1024)
+                    dim , thresh = 1024,0.7
+                    
+                    if "mlp" in name:
+                        dim , thresh = 2048 , 0.24
+                    
+                    U,S,V = decomposition(finetuned_weight - base_weight,dim=dim)
+                    energy_total = torch.sum(S**2)
+                    energy_top_percent = torch.sum(S[:50]**2)
+                    ratio = energy_top_percent / energy_total
                     
                     compressed_U, compressed_V = BinaryDiff(weight=U[:,64:]).to(finetuned_weight.device), BinaryDiff(weight=V[:,64:]).to(finetuned_weight.device)
                     U_mask, U_coeff, V_mask, V_coeff = compressed_U.mask, compressed_U.coeff, compressed_V.mask, compressed_V.coeff
@@ -82,19 +88,7 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
                     U[:,64:] , V[:,64:] = weight_U.T, weight_V.T   # 不确定是否有bug
                     delta = U @ torch.diag(S) @ V.t()
                     with torch.no_grad():
-                        finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(base_weight + delta.to(torch.bfloat16)) 
-                    
-                    
-        elif "mlp" in name:
-            with torch.no_grad():
-                for subname, submodule in module.named_children():
-                    if "proj" in subname:
-                        base_weight = base_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
-                        finetuned_weight = finetuned_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
-                        U,S,V = decomposition(finetuned_weight - base_weight,dim=int(128 * 1.45)) 
-                        delta = torch.mm(torch.mm(U, torch.diag(S)), V.t())
-                        finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(base_weight + delta.to(torch.bfloat16))
-    
+                        finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(base_weight + delta.to(base_weight.dtype)) 
     
     finetuned_model.save_pretrained(save_dir)
 

@@ -1,4 +1,4 @@
-MODEL_SAVE_DIR=save/uncalibrated_model_0
+MODEL_SAVE_DIR=save/uncalibrated_model_attn_1024_mlp_2048
 
 mkdir -p $MODEL_SAVE_DIR
 
