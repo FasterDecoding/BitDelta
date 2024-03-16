@@ -1,10 +1,12 @@
 import argparse
 import transformers
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from accelerate import infer_auto_device_map, init_empty_weights
 import torch.nn as nn
-import os
+import torch.nn.functional as F
 # from llava.model.language_model.llava_llama import LlavaConfig
 from transformers import AutoTokenizer, AutoModelForCausalLM
 # from llava.model import *
@@ -89,22 +91,25 @@ def save_full_model(base_model_name, finetuned_model_name, diff_dir, save_dir, d
     del base_model
 
 
-A = torch.Tensor([[1, 2, 3],[6,5,4]])
-B = torch.Tensor([[9],[9]])
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-A[:,-1:] = B
+# model = AutoModelForCausalLM.from_pretrained("/data/public/opensource_models/meta-llama/Llama-2-7b-hf/").to(device).to(torch.bfloat16)
+# k = model.get_submodule("model.layers.0.self_attn.k_proj").weight
 
-print(A)
-# U,S,V = torch.svd(A)
-# # print("-----------------")
+a = torch.rand(4096) / 1000
+b = torch.rand(4096) / 1000
 
-# print(A.shape)
-# print("-----------------")
-# print(S.shape)
-# print("-----------------")
-# print(V)
+# a , b = a.to(torch.bfloat16) , b.to(torch.bfloat16)
 
-# base_model = get_model("/home/pingbowen/models/Llava-v1-vicuna/Llava-v1/", "cuda")
+dot_fp , dot_pp = torch.dot(a, b) , torch.dot(b, b)
+
+x = dot_fp / dot_pp
+
+cosine_sim = F.cosine_similarity(a,b,dim=0)
+
+cosine_sim2 = F.cosine_similarity(b,a - x * b,dim=0)
+
+import pdb; pdb.set_trace() 
 # params = base_model.state_dict()
 
 # print(params.keys())

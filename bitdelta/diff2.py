@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import gc
-
+import torch.nn.functional as F
 from bitdelta.binary_gemm_kernel import pack, unpack, binary_bmm
 from bitdelta.utils import get_model, get_tokenizer
 
@@ -46,6 +46,32 @@ def Pass(layers=None,name=None):
     return False
 
 
+def solve_orthogonal(p, f):
+    # 计算x
+    delta ,n , sacled_p = f - p, p.shape[-1],p
+
+    # import pdb; pdb.set_trace()
+    
+    for i in range(n):
+        p_i,f_i = p[:,i],f[:,i]
+        dot_fp , dot_pd = torch.dot(f_i, p_i) , torch.dot(p_i, delta[:,i])
+        
+        if dot_fp == 0 or dot_pd == 0: # p_i或f_i是零向量，因为低秩, 边界p_i与delta_i直接正交
+            continue
+        
+        dot_pp = torch.dot(p_i, p_i)
+        x = dot_fp / dot_pp if dot_pp != 0 else None
+
+        
+        # 计算(f - xp)
+        with torch.no_grad():
+            delta[:,i].data.copy_(f_i - x * p_i) if x is not None else None
+            sacled_p[:,i].data.copy_(sacled_p[:,i].data * x) if x is not None else None
+        
+    # import pdb; pdb.set_trace()
+    
+    return delta , sacled_p
+
 def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_dir,layers=None):
     def compress_submodule(name, subname, module, submodule):
         target_device = submodule.weight.device
@@ -68,6 +94,35 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
     for name, module in finetuned_compressed_model.named_modules():
         if "self_attn" in name or "mlp" in name:
             for subname, submodule in module.named_children():
+                
+                with torch.no_grad():
+                    if "proj" in subname:
+                        p = base_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
+                        f = finetuned_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
+                        dim = 128
+                        
+                        if "mlp" in name:
+                            dim = int(128 * 1.45)
+                    
+                        delta , scaled_p = solve_orthogonal(p, f)
+                        U,S,V = decomposition(delta,dim=dim)
+                        delta = U @ torch.diag(S) @ V.t()
+                        finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(scaled_p.to(p.dtype) + delta.to(p.dtype))
+
+                        '''
+                        if torch.sum(torch.abs(delta_pre)) > torch.sum(torch.abs(delta)):
+                            U,S,V = decomposition(delta,dim=128)
+                            delta = U @ torch.diag(S) @ V.t()
+                            finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(scaled_p.to(p.dtype) + delta.to(p.dtype))
+                        else:
+                            U,S,V = decomposition(delta_pre,dim=128)
+                            delta_pre = U @ torch.diag(S) @ V.t()
+                            finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(p.to(p.dtype) + delta_pre.to(p.dtype))
+                        '''
+                
+                '''
+                fp 16 + 1bit
+                
                 if "proj" in subname:
                     base_weight = base_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
                     finetuned_weight = finetuned_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
@@ -89,7 +144,8 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
                     delta = U @ torch.diag(S) @ V.t()
                     with torch.no_grad():
                         finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(base_weight + delta.to(base_weight.dtype)) 
-    
+                '''
+    finetuned_model.to(torch.bfloat16)
     finetuned_model.save_pretrained(save_dir)
 
 def save_diff(finetuned_compressed_model, save_dir,layers=None,ori_diff=None):
