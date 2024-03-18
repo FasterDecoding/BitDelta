@@ -72,6 +72,25 @@ def solve_orthogonal(p, f):
     
     return delta , sacled_p
 
+def get_outlier(tensor, percent=0.5):
+    # 计算保留的元素数量
+    num_elements = tensor.numel()
+    num_to_keep = int(num_elements * percent / 100)
+
+    # 展平张量并获取最大和最小的元素的索引
+    flat_tensor = tensor.flatten()
+    _, top_indices = torch.topk(flat_tensor, num_to_keep, largest=True)
+    _, bottom_indices = torch.topk(flat_tensor, num_to_keep, largest=False)
+
+    # 创建一个全零张量
+    result = torch.zeros_like(tensor)
+
+    # 仅在指定位置放置最大和最小的元素
+    result.view(-1)[top_indices] = tensor.view(-1)[top_indices]
+    result.view(-1)[bottom_indices] = tensor.view(-1)[bottom_indices]
+
+    return result
+    
 def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_dir,layers=None):
     def compress_submodule(name, subname, module, submodule):
         target_device = submodule.weight.device
@@ -99,13 +118,20 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
                     if "proj" in subname:
                         p = base_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
                         f = finetuned_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
-                        dim = 128
+                        dim , fp16_col = 1024 , 64
                         
                         if "mlp" in name:
-                            dim = int(128 * 1.45)
+                            fp16_col = 128
                     
                         delta , scaled_p = solve_orthogonal(p, f)
                         U,S,V = decomposition(delta,dim=dim)
+                        
+                        compressed_U, compressed_V = BinaryDiff(weight=U[:,fp16_col:]).to(f.device), BinaryDiff(weight=V[:,fp16_col:]).to(f.device)
+                        U_mask, U_coeff, V_mask, V_coeff = compressed_U.mask, compressed_U.coeff, compressed_V.mask, compressed_V.coeff
+                        weight_U , weight_V = (unpack(U_mask)*2-1) * U_coeff, (unpack(V_mask)*2-1) * V_coeff
+                        U[:,fp16_col:] , V[:,fp16_col:] = weight_U.T, weight_V.T 
+                        
+                        
                         delta = U @ torch.diag(S) @ V.t()
                         finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(scaled_p.to(p.dtype) + delta.to(p.dtype))
 

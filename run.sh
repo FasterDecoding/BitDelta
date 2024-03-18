@@ -1,4 +1,4 @@
-MODEL_SAVE_DIR=save/uncalibrated_model_orthogonal_math
+MODEL_SAVE_DIR=save/uncalibrated_model_orthogonal_mix_math
 
 mkdir -p $MODEL_SAVE_DIR
 
