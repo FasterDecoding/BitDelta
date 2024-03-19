@@ -86,11 +86,19 @@ def get_outlier(tensor, percent=0.5):
     result = torch.zeros_like(tensor)
 
     # 仅在指定位置放置最大和最小的元素
-    result.view(-1)[top_indices] = tensor.view(-1)[top_indices]
-    result.view(-1)[bottom_indices] = tensor.view(-1)[bottom_indices]
+    result = result.flatten()
+    result[top_indices] = flat_tensor[top_indices]
+    result[bottom_indices] = flat_tensor[bottom_indices]
+    result = result.reshape(tensor.shape)
 
     return result
-    
+
+def copy_nonzero_values(A, B):
+    # 复制B中非零值到A的对应位置
+    mask = B != 0
+    A[mask] = B[mask]
+    return A
+
 def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_dir,layers=None):
     def compress_submodule(name, subname, module, submodule):
         target_device = submodule.weight.device
@@ -118,33 +126,28 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
                     if "proj" in subname:
                         p = base_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
                         f = finetuned_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
-                        dim , fp16_col = 1024 , 64
                         
-                        if "mlp" in name:
-                            fp16_col = 128
-                    
-                        delta , scaled_p = solve_orthogonal(p, f)
-                        U,S,V = decomposition(delta,dim=dim)
+                        delta , outlier_U, outlier_V = f - p , None, None
+                        dim , fp16_col = 1024, 64
                         
+                        if "self_attn" in name:
+                            U,S,V,outlier_U,outlier_V = decomposition(delta,dim=dim,name=name) 
+                        else:
+                            dim , fp16_col = 1024 , 128
+                            # delta , scaled_p = solve_orthogonal(p, f)
+                            U,S,V,outlier_U,outlier_V = decomposition(delta,dim=dim,name=name)
+                                                
                         compressed_U, compressed_V = BinaryDiff(weight=U[:,fp16_col:]).to(f.device), BinaryDiff(weight=V[:,fp16_col:]).to(f.device)
                         U_mask, U_coeff, V_mask, V_coeff = compressed_U.mask, compressed_U.coeff, compressed_V.mask, compressed_V.coeff
                         weight_U , weight_V = (unpack(U_mask)*2-1) * U_coeff, (unpack(V_mask)*2-1) * V_coeff
-                        U[:,fp16_col:] , V[:,fp16_col:] = weight_U.T, weight_V.T 
-                        
-                        
-                        delta = U @ torch.diag(S) @ V.t()
-                        finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(scaled_p.to(p.dtype) + delta.to(p.dtype))
+                        U[:,fp16_col:] , V[:,fp16_col:] = weight_U.T, weight_V.T
 
-                        '''
-                        if torch.sum(torch.abs(delta_pre)) > torch.sum(torch.abs(delta)):
-                            U,S,V = decomposition(delta,dim=128)
-                            delta = U @ torch.diag(S) @ V.t()
-                            finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(scaled_p.to(p.dtype) + delta.to(p.dtype))
-                        else:
-                            U,S,V = decomposition(delta_pre,dim=128)
-                            delta_pre = U @ torch.diag(S) @ V.t()
-                            finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(p.to(p.dtype) + delta_pre.to(p.dtype))
-                        '''
+                        # import pdb; pdb.set_trace()
+                        if outlier_U is not None and outlier_V is not None:
+                            copy_nonzero_values(U[:,fp16_col:], outlier_U) , copy_nonzero_values(V[:,fp16_col:], outlier_V)  
+                        
+                        delta = U @ torch.diag(S) @ V.t() 
+                        finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(p.to(p.dtype) + delta.to(p.dtype))
                 
                 '''
                 fp 16 + 1bit
@@ -171,6 +174,7 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
                     with torch.no_grad():
                         finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(base_weight + delta.to(base_weight.dtype)) 
                 '''
+    # import pdb ; pdb.set_trace()
     finetuned_model.to(torch.bfloat16)
     finetuned_model.save_pretrained(save_dir)
 
@@ -222,16 +226,40 @@ def load_diff(model, diff_dir,ori_diff):
 
     model.config.vocab_size = model.lm_head.weight.size(0)
 
-def decomposition(masked_input_tensor,dim=None,st=None,ed=None,name=None):
+def set_zero(A, B):
+    # 复制B中非零值到A的对应位置
+    mask = B != 0
+    A[mask] = 0
+    return A
+
+
+def decomposition(masked_input_tensor,dim=None,name=None):
     U , S , V = torch.svd(masked_input_tensor.to(torch.float32))
+    
+    outlier_U , outlier_V = None, None
     
     if dim is not None:
         U , S , V = U[:, :dim],S[:dim] ,V[:, :dim]
     
-    if st is not None and ed is not None:
-        U , S , V = U[:, st:ed],S[st:ed] ,V[:, st:ed]
+    if "self_attn" in name:
+        outlier_U = get_outlier(U[:,64:], percent=0.2)
+        outlier_V = get_outlier(V[:,64:], percent=0.2)
+        
+        set_zero(U[:,64:], outlier_U)
+        set_zero(V[:,64:], outlier_V)
+        
+    else:
+        outlier_U = get_outlier(U[:,128:], percent=0.1)
+        outlier_V = get_outlier(V[:,128:], percent=0.1)
+        
+        set_zero(U[:,128:], outlier_U)
+        set_zero(V[:,128:], outlier_V)
     
-    return U, S, V
+    # max_val, min_val, mean_abs_val = round(torch.max(U).item(),4), round(torch.min(U).item(),4), round(torch.mean(torch.abs(U)).item(),4)
+                            
+    # print(f"max_val {max_val} pos_min {round(torch.min(outlier[outlier > 0]).item(),4)} mean_abs_val {mean_abs_val} ratio {round(torch.min(outlier[outlier > 0]).item() / mean_abs_val,4)}")
+    # import pdb; pdb.set_trace()
+    return U, S, V , outlier_U, outlier_V
 
 def save_full_model(base_model_name, finetuned_model_name, diff_dir, save_dir, device,layers=None,ori_diff=None):
     base_model = get_model(base_model_name, device)
