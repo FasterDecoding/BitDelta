@@ -5,6 +5,9 @@ import torch.nn.functional as F
 from bitdelta.binary_gemm_kernel import pack, unpack, binary_bmm
 from bitdelta.utils import get_model, get_tokenizer
 
+# 离群值抽出之后 原来位置设定成多少，如果设置成0会让分母增大
+# U, V
+
 class BinaryDiff(nn.Module):
     def __init__(self, weight):
         super().__init__()
@@ -142,9 +145,10 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
                         weight_U , weight_V = (unpack(U_mask)*2-1) * U_coeff, (unpack(V_mask)*2-1) * V_coeff
                         U[:,fp16_col:] , V[:,fp16_col:] = weight_U.T, weight_V.T
 
-                        # import pdb; pdb.set_trace()
+                        
                         if outlier_U is not None and outlier_V is not None:
-                            copy_nonzero_values(U[:,fp16_col:], outlier_U) , copy_nonzero_values(V[:,fp16_col:], outlier_V)  
+                            tmp = copy_nonzero_values(U[:,fp16_col:], outlier_U) , copy_nonzero_values(V[:,fp16_col:], outlier_V) 
+                            # import pdb; pdb.set_trace() 
                         
                         delta = U @ torch.diag(S) @ V.t() 
                         finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(p.to(p.dtype) + delta.to(p.dtype))
@@ -246,6 +250,7 @@ def decomposition(masked_input_tensor,dim=None,name=None):
         outlier_V = get_outlier(V[:,64:], percent=0.2)
         
         set_zero(U[:,64:], outlier_U)
+        # import pdb; pdb.set_trace()
         set_zero(V[:,64:], outlier_V)
         
     else:

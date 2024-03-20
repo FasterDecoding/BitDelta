@@ -138,14 +138,8 @@ def copy_nonzero_values(A, B):
 n = 4
 A = torch.randn(n, n)  # 随机生成一个n × n的张量A
 B = torch.zeros(n, n)  # 创建一个n × n的全零张量B
-
-# 在B中随机设置一些非零值
-indices = torch.randint(0, n, (3, 2))  # 随机选择一些位置
-for i, j in indices:
-    B[i, j] = torch.randn(1).item()  # 随机非零值
-
-# 复制B中的非零值到A
-updated_A = copy_nonzero_values(A, B)
+A = A.flatten()
+values , top_indices = torch.topk(A, 1, largest=True)
 
 
 import pdb; pdb.set_trace() 
