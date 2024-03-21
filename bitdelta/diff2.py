@@ -147,7 +147,7 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
 
                         
                         if outlier_U is not None and outlier_V is not None:
-                            tmp = copy_nonzero_values(U[:,fp16_col:], outlier_U) , copy_nonzero_values(V[:,fp16_col:], outlier_V) 
+                            copy_nonzero_values(U[:,fp16_col:], outlier_U) , copy_nonzero_values(V[:,fp16_col:], outlier_V) 
                             # import pdb; pdb.set_trace() 
                         
                         delta = U @ torch.diag(S) @ V.t() 

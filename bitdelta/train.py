@@ -46,6 +46,10 @@ finetuned_compressed_model = get_model(args.finetuned_model, args.finetuned_comp
 print(f"compressing diff...")
 compress_diff(base_model, finetuned_model, finetuned_compressed_model,layers=args.layers)
 
+tokenizer.save_pretrained("/home/pingbowen/workspace/delta-compression/BitDelta/save/test")
+
+
+'''
 train_num_samples = args.batch_size * args.num_steps
 train_dataset = get_dataset(
     args.dataset_name,
@@ -114,3 +118,4 @@ if args.save_full_model:
     save_full_model(args.base_model, args.finetuned_model, os.path.join(args.save_dir, "diff_untrained.pt"), os.path.join(args.save_dir, f"uncalibrated_model"), device="cpu",layers=args.layers,ori_diff=ori_diff)
     # print("saving calibrated model")
     # save_full_model(args.base_model, args.finetuned_model, os.path.join(args.save_dir, "diff.pt"), os.path.join(args.save_dir, "calibrated_model"), device="cpu")
+'''

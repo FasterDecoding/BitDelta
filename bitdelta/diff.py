@@ -9,7 +9,9 @@ class BinaryDiff(nn.Module):
     def __init__(self, base, finetune):
         super().__init__()
         diff = finetune - base
-        diff = decomposition(diff, st=64, ed=1024)
+        outlier = get_outlier(diff, percent=0.02)
+        set_zero(diff, outlier)
+        # import pdb; pdb.set_trace()
         quantile = diff.float().abs().mean()
 
         mask = torch.ones_like(diff)
@@ -18,6 +20,7 @@ class BinaryDiff(nn.Module):
      
         self.register_buffer("mask", mask)
         self.register_buffer("base", base.T)
+        self.register_buffer("outlier", outlier)
         self.register_parameter(
             "coeff",
             nn.Parameter(
@@ -39,13 +42,38 @@ class BinaryDiff(nn.Module):
         repeated_mask = self.mask.unsqueeze(0).repeat(x.size(0), 1, 1)
         return x @ self.base + self.coeff * binary_bmm(x, repeated_mask)
 
-def Pass(layers=None,name=None):
-    if layers is not None:
-        for layer in layers:
-            if layer in name:
-                return True
-    return False
+def set_zero(A, B):
+    # 复制B中非零值到A的对应位置
+    mask = B != 0
+    A[mask] = 0
+    return A
 
+def get_outlier(tensor, percent=0.5):
+    # 计算保留的元素数量
+    num_elements = tensor.numel()
+    num_to_keep = int(num_elements * percent / 100)
+
+    # 展平张量并获取最大和最小的元素的索引
+    flat_tensor = tensor.flatten()
+    _, top_indices = torch.topk(flat_tensor, num_to_keep, largest=True)
+    _, bottom_indices = torch.topk(flat_tensor, num_to_keep, largest=False)
+
+    # 创建一个全零张量
+    result = torch.zeros_like(tensor)
+
+    # 仅在指定位置放置最大和最小的元素
+    result = result.flatten()
+    result[top_indices] = flat_tensor[top_indices]
+    result[bottom_indices] = flat_tensor[bottom_indices]
+    result = result.reshape(tensor.shape)
+
+    return result
+
+def copy_nonzero_values(A, B):
+    # 复制B中非零值到A的对应位置
+    mask = B != 0
+    A[mask] = B[mask]
+    return A
 
 def compress_diff(base_model, finetuned_model, finetuned_compressed_model,layers=None):
     def compress_submodule(name, subname, module, submodule):
@@ -67,25 +95,26 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,layers
 
     # TODO: this can be parallelized
     # flag = False
-    for name, module in finetuned_compressed_model.named_modules():
-        # if flag == True:
-        #     break
-        
-        if "self_attn" in name:
-            for subname, submodule in module.named_children():
-                if "proj" in subname:
-                    compress_submodule(name, subname, module, submodule)
-        elif "mlp" in name:
-            with torch.no_grad():
+    with torch.no_grad():
+        for name, module in finetuned_model.named_modules():
+            if "self_attn" in name or "mlp" in name:
                 for subname, submodule in module.named_children():
                     if "proj" in subname:
-                        base_weight = base_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
-                        finetuned_weight = finetuned_model.get_submodule(f"{name}.{subname}").weight.detach().to(submodule.weight.device)
-                        delta = decomposition(finetuned_weight - base_weight,dim=int(128 * 1.45)) 
-                        finetuned_compressed_model.get_submodule(f"{name}.{subname}").weight.copy_(base_weight + delta.to(torch.bfloat16))
-                        # flag = True
+                        p , f = base_model.get_submodule(f"{name}.{subname}").weight.detach() , finetuned_model.get_submodule(f"{name}.{subname}").weight.detach()
+                        
+                        compressed = BinaryDiff(base=p, finetune=f)
+                        mask, coeff , outlier = compressed.mask, compressed.coeff, compressed.outlier
+                        weight = (unpack(mask)*2-1) * coeff
+                        weight = weight.T.to(outlier.dtype)
+                        
+                        copy_nonzero_values(weight, outlier)
                         # import pdb; pdb.set_trace()
-                        # break
+                        finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(p.to(p.dtype) + weight.to(p.dtype))
+    
+    finetuned_model.save_pretrained("/home/pingbowen/workspace/delta-compression/BitDelta/save/test")
+                    
+                    
+                    
 
 def save_diff(finetuned_compressed_model, save_dir,layers=None,ori_diff=None):
     diff_dict = {}
