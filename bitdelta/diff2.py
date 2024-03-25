@@ -102,7 +102,7 @@ def copy_nonzero_values(A, B):
     A[mask] = B[mask]
     return A
 
-def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_dir,layers=None):
+def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_dir,args):
     def compress_submodule(name, subname, module, submodule):
         target_device = submodule.weight.device
                     
@@ -134,11 +134,11 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
                         dim , fp16_col = 1024, 64
                         
                         if "self_attn" in name:
-                            U,S,V,outlier_U,outlier_V = decomposition(delta,dim=dim,name=name) 
+                            U,S,V,outlier_U,outlier_V = decomposition(delta,dim=dim,name=name,attn_outlier=args.attn_outlier) 
                         else:
                             dim , fp16_col = 1024 , 128
                             # delta , scaled_p = solve_orthogonal(p, f)
-                            U,S,V,outlier_U,outlier_V = decomposition(delta,dim=dim,name=name)
+                            U,S,V,outlier_U,outlier_V = decomposition(delta,dim=dim,name=name,mlp_outlier=args.mlp_outlier)
                                                 
                         compressed_U, compressed_V = BinaryDiff(weight=U[:,fp16_col:]).to(f.device), BinaryDiff(weight=V[:,fp16_col:]).to(f.device)
                         U_mask, U_coeff, V_mask, V_coeff = compressed_U.mask, compressed_U.coeff, compressed_V.mask, compressed_V.coeff
@@ -237,7 +237,7 @@ def set_zero(A, B):
     return A
 
 
-def decomposition(masked_input_tensor,dim=None,name=None):
+def decomposition(masked_input_tensor,dim=None,name=None,attn_outlier=0.1,mlp_outlier=0.1):
     U , S , V = torch.svd(masked_input_tensor.to(torch.float32))
     
     outlier_U , outlier_V = None, None
@@ -246,16 +246,16 @@ def decomposition(masked_input_tensor,dim=None,name=None):
         U , S , V = U[:, :dim],S[:dim] ,V[:, :dim]
     
     if "self_attn" in name:
-        outlier_U = get_outlier(U[:,64:], percent=0.2)
-        outlier_V = get_outlier(V[:,64:], percent=0.2)
+        outlier_U = get_outlier(U[:,64:], percent=attn_outlier)
+        outlier_V = get_outlier(V[:,64:], percent=attn_outlier)
         
         set_zero(U[:,64:], outlier_U)
         # import pdb; pdb.set_trace()
         set_zero(V[:,64:], outlier_V)
         
     else:
-        outlier_U = get_outlier(U[:,128:], percent=0.1)
-        outlier_V = get_outlier(V[:,128:], percent=0.1)
+        outlier_U = get_outlier(U[:,128:], percent=mlp_outlier)
+        outlier_V = get_outlier(V[:,128:], percent=mlp_outlier)
         
         set_zero(U[:,128:], outlier_U)
         set_zero(V[:,128:], outlier_V)

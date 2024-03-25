@@ -20,12 +20,12 @@ os.makedirs(args.save_dir, exist_ok=True)
 tokenizer = get_tokenizer(args.finetuned_model)
 
 with torch.no_grad():
-    base_model = get_model(args.base_model, args.base_model_device, args.base_model_memory_map).to(torch.float32)
-    finetuned_model = get_model(args.finetuned_model, args.finetuned_model_device, args.finetuned_model_memory_map).to(torch.float32)
+    base_model = get_model(args.base_model, args.base_model_device, args.base_model_memory_map)
+    finetuned_model = get_model(args.finetuned_model, args.finetuned_model_device, args.finetuned_model_memory_map)
 
 finetuned_compressed_model = get_model(args.finetuned_model, args.finetuned_compressed_model_device, args.finetuned_compressed_model_memory_map)
 
 print(f"compressing diff...")
-compress_diff(base_model, finetuned_model, finetuned_compressed_model,args.save_dir)
+compress_diff(base_model, finetuned_model, finetuned_compressed_model,args.save_dir,args)
 
 tokenizer.save_pretrained(args.save_dir)
