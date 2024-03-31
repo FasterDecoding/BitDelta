@@ -66,6 +66,7 @@ def parse_args():
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--attn_outlier", type=float,default=1e-4)
     parser.add_argument("--mlp_outlier", type=float,default=1e-4)
+    parser.add_argument("--choice", type=str,choices=['mix','bit','rank'],default=None)
 
     # device management
     parser.add_argument("--base_model_device", type=str, default="0")
@@ -144,7 +145,6 @@ def get_model(model_name, device, memory_map=None):
     else: # single-gpu or cpu
         return transformers.AutoModelForCausalLM.from_pretrained(
             model_name,
-            # torch_dtype=torch.float16,
             torch_dtype=torch.bfloat16,
             low_cpu_mem_usage=True,
         ).to(device)

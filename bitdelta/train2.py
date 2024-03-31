@@ -27,7 +27,7 @@ with torch.no_grad():
         finetuned_model = get_model(args.finetuned_model, args.finetuned_model_device, args.finetuned_model_memory_map)
 
 
-import pdb;pdb.set_trace()
+# import pdb;pdb.set_trace()
 print(f"compressing diff...")
 compress_diff(base_model, finetuned_model, args.save_dir,args)
 
