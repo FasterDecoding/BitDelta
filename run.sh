@@ -1,4 +1,4 @@
-MODEL_SAVE_DIR=./../save/uncalibrated_llava
+MODEL_SAVE_DIR=./../save/llama_7b_chat_attn_mlp_outlier_0.2_0.1/
 
 mkdir -p $MODEL_SAVE_DIR
 

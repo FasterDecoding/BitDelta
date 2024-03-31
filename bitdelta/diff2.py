@@ -102,7 +102,7 @@ def copy_nonzero_values(A, B):
     A[mask] = B[mask]
     return A
 
-def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_dir,args):
+def compress_diff(base_model, finetuned_model, save_dir,args):
     def compress_submodule(name, subname, module, submodule):
         target_device = submodule.weight.device
                     
@@ -121,7 +121,11 @@ def compress_diff(base_model, finetuned_model, finetuned_compressed_model,save_d
         setattr(module, subname, compressed)
 
     # TODO: 根据thresh 选择压缩比例
-    for name, module in finetuned_compressed_model.named_modules():
+    for name, module in finetuned_model.named_modules():
+        
+        if "vision" in name:
+            continue
+        
         if "self_attn" in name or "mlp" in name:
             for subname, submodule in module.named_children():
                 
