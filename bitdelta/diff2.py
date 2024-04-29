@@ -121,8 +121,8 @@ def compress_diff(base_model, finetuned_model, save_dir,args):
         setattr(module, subname, compressed)
 
     # TODO: 根据thresh 选择压缩比例
+    param_dict = dict()
     for name, module in finetuned_model.named_modules():
-        
         if "vision" in name:
             continue
         
@@ -162,9 +162,32 @@ def compress_diff(base_model, finetuned_model, save_dir,args):
                             mask , coeff = compressed.mask, compressed.coeff
                             delta = (unpack(mask)*2-1) * coeff
                             delta = delta.T
+                        elif args.choice == "svd":
+                            dim = 1024
+                            
+                            if "mlp" in name:
+                                dim = int(1024 * 1.45)
+        
+                            U , S , V = decomposition((f - p).clone().detach(),dim=dim)
+                            param_dict[f"{name}.{subname}" + ".base"] = p
+                            param_dict[f"{name}.{subname}" + ".U"] = U.to(p.dtype)
+                            param_dict[f"{name}.{subname}" + ".S"] = S.to(p.dtype)
+                            param_dict[f"{name}.{subname}" + ".V"] = V.to(p.dtype)                            
+                            # if "llava" in args.finetuned_model.lower():
+                            #     U , S , V = decomposition((f - p).clone().detach(),dim=1024)
+                            #     param_dict[f"{name}.{subname}" + ".base"] = p
+                            #     param_dict[f"{name}.{subname}" + ".U"] = U.to(p.dtype)
+                            #     param_dict[f"{name}.{subname}" + ".S"] = S.to(p.dtype)
+                            #     param_dict[f"{name}.{subname}" + ".V"] = V.to(p.dtype)
                             
                         finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(p.to(p.dtype) + delta.to(p.dtype))
-    # import pdb ; pdb.set_trace()
+    
+    # if "llava" in args.finetuned_model.lower():
+    #     torch.save(param_dict, "/home/pingbowen/workspace/delta-compression/saved_model/llava_svd.pt")                     
+    if args.choice == "svd":
+        torch.save(param_dict, args.svd_dict)
+    
+    
     finetuned_model.to(torch.bfloat16)
     finetuned_model.save_pretrained(save_dir)
 
@@ -231,26 +254,26 @@ def decomposition(masked_input_tensor,dim=None,name=None,attn_outlier=0.1,mlp_ou
     if dim is not None:
         U , S , V = U[:, :dim],S[:dim] ,V[:, :dim]
     
-    if "self_attn" in name:
-        outlier_U = get_outlier(U[:,64:], percent=attn_outlier)
-        outlier_V = get_outlier(V[:,64:], percent=attn_outlier)
+    # if "self_attn" in name:
+    #     outlier_U = get_outlier(U[:,64:], percent=attn_outlier)
+    #     outlier_V = get_outlier(V[:,64:], percent=attn_outlier)
         
-        set_zero(U[:,64:], outlier_U)
-        # import pdb; pdb.set_trace()
-        set_zero(V[:,64:], outlier_V)
+    #     set_zero(U[:,64:], outlier_U)
+    #     # import pdb; pdb.set_trace()
+    #     set_zero(V[:,64:], outlier_V)
         
-    else:
-        outlier_U = get_outlier(U[:,128:], percent=mlp_outlier)
-        outlier_V = get_outlier(V[:,128:], percent=mlp_outlier)
+    # else:
+    #     outlier_U = get_outlier(U[:,128:], percent=mlp_outlier)
+    #     outlier_V = get_outlier(V[:,128:], percent=mlp_outlier)
         
-        set_zero(U[:,128:], outlier_U)
-        set_zero(V[:,128:], outlier_V)
+    #     set_zero(U[:,128:], outlier_U)
+    #     set_zero(V[:,128:], outlier_V)
     
     # max_val, min_val, mean_abs_val = round(torch.max(U).item(),4), round(torch.min(U).item(),4), round(torch.mean(torch.abs(U)).item(),4)
                             
     # print(f"max_val {max_val} pos_min {round(torch.min(outlier[outlier > 0]).item(),4)} mean_abs_val {mean_abs_val} ratio {round(torch.min(outlier[outlier > 0]).item() / mean_abs_val,4)}")
     # import pdb; pdb.set_trace()
-    return U, S, V , outlier_U, outlier_V
+    return U, S, V # , outlier_U, outlier_V
 
 def save_full_model(base_model_name, finetuned_model_name, diff_dir, save_dir, device,layers=None,ori_diff=None):
     base_model = get_model(base_model_name, device)

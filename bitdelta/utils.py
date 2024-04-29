@@ -4,8 +4,10 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM,AutoTokenizer
 from accelerate import infer_auto_device_map, init_empty_weights
 import os
-from llava.model import *
-from llava.constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+try:
+    from llava.model import *
+    from llava.constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+except: pass
 
 def load_llava(path,device):
     tokenizer = AutoTokenizer.from_pretrained(path, use_fast=False)
@@ -44,7 +46,7 @@ def load_llava(path,device):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="BitDelta")
-    
+    #
     # models
     parser.add_argument(
         "--finetuned_model", type=str, default="lmsys/vicuna-7b-v1.5-16k"
@@ -52,6 +54,7 @@ def parse_args():
     parser.add_argument("--base_model", type=str, default="meta-llama/Llama-2-7b-hf")
 
     # train params
+    parser.add_argument("--svd_dict", type=str, default="")
     parser.add_argument("--dataset_name", type=str, default="c4")
     parser.add_argument("--subset", type=str, default="en")
     parser.add_argument("--data_dir", type=str, default="en")
@@ -66,7 +69,7 @@ def parse_args():
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--attn_outlier", type=float,default=1e-4)
     parser.add_argument("--mlp_outlier", type=float,default=1e-4)
-    parser.add_argument("--choice", type=str,choices=['mix','bit','rank'],default=None)
+    parser.add_argument("--choice", type=str,choices=['mix','bit','svd'],default=None)
 
     # device management
     parser.add_argument("--base_model_device", type=str, default="0")

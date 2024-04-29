@@ -133,19 +133,36 @@ def copy_nonzero_values(A, B):
     A[mask] = B[mask]
     return A
 
+def load_svd(model):
+    param_dict = torch.load("/home/pingbowen/workspace/delta-compression/saved_model/llava_svd.pt")
+    
+    with torch.no_grad():
+        for k,v in param_dict.items():
+            if "base" in k:
+                dim = args.dim
+                
+                if "mlp" in k:
+                    dim = int(dim * 1.45)
+                
+                k = k.replace(".base", "")
+                
+                U = param_dict[k + ".U"][:, :dim]
+                S = param_dict[k + ".S"][:dim]
+                V = param_dict[k + ".V"][:, :dim]
+                # import pdb; pdb.set_trace()
+                model.get_submodule(k).weight.copy_(v + U @ torch.diag(S) @ V.t())
 
-# 示例
-n = 4
-A = torch.randn(n, n)  # 随机生成一个n × n的张量A
-B = torch.zeros(n, n)  # 创建一个n × n的全零张量B
-A = A.flatten()
-values , top_indices = torch.topk(A, 1, largest=True)
+parser = argparse.ArgumentParser(description="BitDelta")
+parser.add_argument("--dim", type=int, default=128)
+args = parser.parse_args()
 
+tokenizer = AutoTokenizer.from_pretrained("/data/public/opensource_models/meta-llama/Llama-2-7b-chat-hf/")
+model = AutoModelForCausalLM.from_pretrained("/data/public/opensource_models/meta-llama/Llama-2-7b-chat-hf/", low_cpu_mem_usage=True, torch_dtype=torch.bfloat16)
 
-import pdb; pdb.set_trace() 
-# params = base_model.state_dict()
+load_svd(model)
 
-# print(params.keys())
+tokenizer.save_pretrained(f"/home/pingbowen/workspace/delta-compression/save/Llama-chat-svd_{args.dim}/")
+model.save_pretrained(f"/home/pingbowen/workspace/delta-compression/save/Llama-chat-svd_{args.dim}/")
 
 # get_tokenizer("/data/public/opensource_models/WizardLM/WizardMath-7B-V1.0/")
 # save_full_model("/data/public/opensource_models/meta-llama/Llama-2-7b-hf/", "/data/public/opensource_models/WizardLM/WizardMath-7B-V1.0/", os.path.join("/home/pingbowen/workspace/delta-compression/BitDelta/save", "diff_untrained.pt"), os.path.join("/home/pingbowen/workspace/delta-compression/BitDelta/save", "uncalibrated_model"), device="cuda")
