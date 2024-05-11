@@ -123,6 +123,7 @@ def compress_diff(base_model, finetuned_model, save_dir,args):
     # TODO: 根据thresh 选择压缩比例
     param_dict = dict()
     for name, module in finetuned_model.named_modules():
+        # import pdb; pdb.set_trace()
         if "vision" in name:
             continue
         
@@ -162,11 +163,15 @@ def compress_diff(base_model, finetuned_model, save_dir,args):
                             mask , coeff = compressed.mask, compressed.coeff
                             delta = (unpack(mask)*2-1) * coeff
                             delta = delta.T
+                            
+                            if "llava" in args.finetuned_model.lower():
+                                param_dict[f"{name}.{subname}" + ".weight"] = p + delta.to(p.dtype)
+                            
                         elif args.choice == "svd":
-                            dim = 1024
+                            dim = args.dim
                             
                             if "mlp" in name:
-                                dim = int(1024 * 1.45)
+                                dim = int(dim * args.scale_factor)
         
                             U , S , V = decomposition((f - p).clone().detach(),dim=dim)
                             param_dict[f"{name}.{subname}" + ".base"] = p
@@ -182,8 +187,9 @@ def compress_diff(base_model, finetuned_model, save_dir,args):
                             
                         finetuned_model.get_submodule(f"{name}.{subname}").weight.copy_(p.to(p.dtype) + delta.to(p.dtype))
     
-    # if "llava" in args.finetuned_model.lower():
-    #     torch.save(param_dict, "/home/pingbowen/workspace/delta-compression/saved_model/llava_svd.pt")                     
+    if "llava" in args.finetuned_model.lower() and args.choice == "bit":
+        torch.save(param_dict, args.svd_dict)
+                             
     if args.choice == "svd":
         torch.save(param_dict, args.svd_dict)
     

@@ -61,6 +61,8 @@ def parse_args():
     parser.add_argument("--split", type=str, default="train")
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--num_steps", type=int, default=100)
+    parser.add_argument("--dim", type=int, default=1024)
+    parser.add_argument("--scale_factor", type=float, default=1.45)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--layers", nargs='+', default=None)
     parser.add_argument("--save_num", type=int, default=0)

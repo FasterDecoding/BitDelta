@@ -134,15 +134,15 @@ def copy_nonzero_values(A, B):
     return A
 
 def load_svd(model):
-    param_dict = torch.load("/home/pingbowen/workspace/delta-compression/saved_model/llava_svd.pt")
-    
+    param_dict = torch.load(args.svd_dict)
+    # import pdb; pdb.set_trace() 
     with torch.no_grad():
         for k,v in param_dict.items():
             if "base" in k:
                 dim = args.dim
                 
                 if "mlp" in k:
-                    dim = int(dim * 1.45)
+                    dim = int(dim * args.scale_factor)
                 
                 k = k.replace(".base", "")
                 
@@ -154,15 +154,17 @@ def load_svd(model):
 
 parser = argparse.ArgumentParser(description="BitDelta")
 parser.add_argument("--dim", type=int, default=128)
+parser.add_argument("--scale_factor", type=float, default=1.45)
+parser.add_argument("--svd_dict", type=str, default="")
 args = parser.parse_args()
 
-tokenizer = AutoTokenizer.from_pretrained("/data/public/opensource_models/meta-llama/Llama-2-7b-chat-hf/")
-model = AutoModelForCausalLM.from_pretrained("/data/public/opensource_models/meta-llama/Llama-2-7b-chat-hf/", low_cpu_mem_usage=True, torch_dtype=torch.bfloat16)
+tokenizer = AutoTokenizer.from_pretrained("/data/public/wangshuo/exp/ft-en-metameth-llama-2-7b/ckpts/checkpoints/epoch_2_hf")
+model = AutoModelForCausalLM.from_pretrained("/data/public/wangshuo/exp/ft-en-metameth-llama-2-7b/ckpts/checkpoints/epoch_2_hf", torch_dtype=torch.bfloat16) # low_cpu_mem_usage=True
 
 load_svd(model)
 
-tokenizer.save_pretrained(f"/home/pingbowen/workspace/delta-compression/save/Llama-chat-svd_{args.dim}/")
-model.save_pretrained(f"/home/pingbowen/workspace/delta-compression/save/Llama-chat-svd_{args.dim}/")
+tokenizer.save_pretrained(f"/data/groups/QY_LLM_Other/pingbowen/models/mathlora/math_svd/")
+model.save_pretrained(f"/data/groups/QY_LLM_Other/pingbowen/models/mathlora/math_svd/")
 
 # get_tokenizer("/data/public/opensource_models/WizardLM/WizardMath-7B-V1.0/")
 # save_full_model("/data/public/opensource_models/meta-llama/Llama-2-7b-hf/", "/data/public/opensource_models/WizardLM/WizardMath-7B-V1.0/", os.path.join("/home/pingbowen/workspace/delta-compression/BitDelta/save", "diff_untrained.pt"), os.path.join("/home/pingbowen/workspace/delta-compression/BitDelta/save", "uncalibrated_model"), device="cuda")
