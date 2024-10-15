@@ -20,6 +20,7 @@ The current release supports:
 ## News
 
 - [02/2024] 🔥 Arxiv release!
+- [10/2024] 🔥 BitDelta is accepted to NeurIPS 2024!
 
 ## Abstract
 
