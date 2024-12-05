@@ -14,7 +14,7 @@ The current release supports:
 
 - Llama-2 and Mistral based models.
 - Memory efficient 16-bit + 1-bit Δ Linear in PyTorch
-- Triton kernel for fast inference
+- Triton kernel for fast inference (TODO: Update repo with faster [BitBLAS](https://github.com/microsoft/BitBLAS) W1A16 kernel)
 - Gradio demo showcasing batched inference over 6 Mistral-7B based models, using only **30 GB** of GPU memory!
 
 ## News
